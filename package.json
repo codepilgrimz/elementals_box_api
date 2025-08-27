@@ -1,0 +1,40 @@
+{
+  "name": "daily-free-box-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Solana Daily Free Box backend (NFT-gated)",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "prepare": "husky"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@metaplex-foundation/js": "^0.19.4",
+    "@solana/spl-token": "^0.4.9",
+    "@solana/web3.js": "^1.95.3",
+    "bs58": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "ioredis": "^5.4.1",
+    "morgan": "^1.10.0",
+    "uuid": "^9.0.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^20.11.30",
+    "eslint": "^8.57.0",
+    "husky": "^9.1.7",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}
