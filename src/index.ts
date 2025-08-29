@@ -308,10 +308,11 @@ app.post('/open', async (req: any, res: any) => {
       prizeTxSig = await sendAndConfirmTransaction(connection, tx, [treasury], { commitment: 'confirmed' });
     } else if (prize.kind === 'NFT') {
       // Pick NFT prize from treasury in prizeCollection
-      const nft = await pickPrizeNftFromTreasury(mx, treasuryPubkey, prizeCollection);
+      const nft: any = await pickPrizeNftFromTreasury(mx, treasuryPubkey, prizeCollection);
       if (nft) {
-        const sigNft = await transferNftTo(connection, treasury, nft.mint.address, owner);
-        prizeMint = nft.mint.address.toBase58();
+        const mintAddress = nft.mint.address || nft.mintAddress
+        const sigNft = await transferNftTo(connection, treasury, mintAddress, owner);
+        prizeMint = mintAddress.toString();
         prizeTxSig = sigNft;
       } else {
         // no NFT inventory, fallback to nothing
@@ -347,3 +348,4 @@ app.listen(ENV.PORT, () => {
   console.log(`[daily-free-box] Listening on :${ENV.PORT}`);
   console.log(`Treasury: ${treasuryPubkey.toBase58()}`);
 });
+

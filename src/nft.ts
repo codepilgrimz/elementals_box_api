@@ -6,10 +6,12 @@ import {
   Transaction,
 } from '@solana/web3.js';
 import {
+  keypairIdentity,
   Metadata,
   Metaplex,
   Nft,
   Sft,
+  toBigNumber,
 } from '@metaplex-foundation/js';
 import {
   getOrCreateAssociatedTokenAccount,
@@ -143,39 +145,39 @@ export async function findCollectionCountForOwner(
 export async function pickPrizeNftFromTreasury(
   mx: Metaplex,
   treasury: PublicKey,
-  prizeCollection: PublicKey | string // PublicKey = certified, string = legacy JSON name
-): Promise<Nft | Sft | null> {
+  collection: PublicKey | string // PublicKey = certified, string = legacy JSON name
+): Promise<Nft | Sft | Metadata | null> {
   try {
     const all = await mx.nfts().findAllByOwner({ owner: treasury });
     const eligible: (Nft | Sft)[] = [];
 
-    for (const m of all) {
+    for (const metadata of all) {
       try {
-        // Load full NFT/SFT
-        const nft: Nft | Sft =
-          m.model === "metadata"
-            ? await mx.nfts().load({ metadata: m as Metadata })
-            : (m as Nft | Sft);
-
-        // Certified collection check
-        if (prizeCollection instanceof PublicKey) {
-          if (nft.collection?.address?.equals(prizeCollection) && nft.collection.verified) {
-            eligible.push(nft);
-            continue;
+        // For certified collections - quick check first
+        if (collection instanceof PublicKey) {
+          if (metadata.model === 'metadata') {
+            const meta = metadata as Metadata;
+            if (meta.collection && meta.collection.address.equals(collection)) {
+              if (!meta.collection.verified) {
+                const nft = await mx.nfts().load({ metadata: meta });
+                if(nft.collection?.verified){
+                  eligible.push(nft);
+                }
+              }
+            }
+          } else {
+            const nft = metadata as Nft | Sft;
+            if(nft.collection?.address?.equals(collection) && nft.collection.verified) {
+              eligible.push(nft)
+            }
+          }
+        } else {
+          const nft = metadata as Nft | Sft;
+          if (nft && (nft.symbol === "ELMNT")) {
+            eligible.push(nft)
           }
         }
 
-        // Legacy JSON-based collection check
-        if (typeof prizeCollection === "string") {
-          if (!nft.jsonLoaded) {
-            // hydrate JSON metadata
-            await mx.nfts().load({ metadata: nft as any as Metadata });
-          }
-          const col = nft.json?.collection;
-          if (col && (col.name === prizeCollection || col.family === prizeCollection)) {
-            eligible.push(nft);
-          }
-        }
       } catch (err) {
         console.error("pickPrizeNft inner error:", err);
       }
@@ -194,20 +196,31 @@ export async function pickPrizeNftFromTreasury(
  * Transfer one token of the NFT mint from treasury to recipient.
  * Works for both 1/1 NFTs (decimals=0, supply=1) and SFTs (decimals may be >0, but transfer 1 unit).
  */
-export async function transferNftTo(connection: Connection, treasury: Keypair, mint: PublicKey, recipient: PublicKey): Promise<string> {
-  // Create/get ATAs
-  const from = treasury.publicKey;
-  const fromAta = await getOrCreateAssociatedTokenAccount(connection, treasury, mint, from);
-  const toAta = await getOrCreateAssociatedTokenAccount(connection, treasury, mint, recipient, true);
+export async function transferNftTo(
+  connection: Connection, 
+  treasury: Keypair, 
+  mint: PublicKey, 
+  recipient: PublicKey
+): Promise<string> {
+  try {
+    // Initialize Metaplex
+    const metaplex = Metaplex.make(connection)
+      .use(keypairIdentity(treasury));
 
-  // Ensure source has at least 1 unit
-  const fromAcc = await getAccount(connection, fromAta.address);
-  if (Number(fromAcc.amount) < 1) {
-    throw new Error('Treasury does not hold any of the specified NFT mint');
+    // Get the NFT
+    const nft = await metaplex.nfts().findByMint({ mintAddress: mint });
+
+    // Transfer using Metaplex (handles metadata properly)
+    const { response } = await metaplex.nfts().transfer({
+      nftOrSft: nft,
+      fromOwner: treasury.publicKey,
+      toOwner: recipient
+    });
+
+    return response.signature;
+
+  } catch (error) {
+    console.error('Metaplex transfer failed:', error);
+    throw new Error(`NFT transfer failed`);
   }
-
-  const ix = createTransferInstruction(fromAta.address, toAta.address, from, 1); // transfer 1 unit
-  const tx = new Transaction().add(ix);
-  const sig = await sendAndConfirmTransaction(connection, tx, [treasury], { commitment: 'confirmed' });
-  return sig;
 }
