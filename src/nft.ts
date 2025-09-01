@@ -1,4 +1,5 @@
 import {
+  ComputeBudgetProgram,
   Connection,
   Keypair,
   PublicKey,
@@ -210,12 +211,27 @@ export async function transferNftTo(
     // Get the NFT
     const nft = await metaplex.nfts().findByMint({ mintAddress: mint });
 
-    // Transfer using Metaplex (handles metadata properly)
-    const { response } = await metaplex.nfts().transfer({
+    // Build the transfer
+    const builder  = metaplex.nfts().builders().transfer({
       nftOrSft: nft,
       fromOwner: treasury.publicKey,
       toOwner: recipient
     });
+    
+    // Prepend priority-fee & (optionally) a compute limit
+    builder.prepend({
+      instruction: ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 }),
+      signers: [],
+      key: 'cuLimit',
+    });
+
+    builder.prepend({
+      instruction: ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 10_000 }), // 0.01 lamport/CU
+      signers: [],
+      key: 'cuPrice',
+    });
+
+    const { response } = await builder.sendAndConfirm(metaplex);
 
     return response.signature;
 
