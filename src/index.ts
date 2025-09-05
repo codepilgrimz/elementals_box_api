@@ -25,6 +25,7 @@ import cors from "cors";
 
 import { choosePrize } from './rewards.js';
 import { findCollectionCountForOwner, checkGateTokenHoldings, pickPrizeNftFromTreasury, transferNftTo } from './nft.js';
+import { logPrize } from './utils.js';
 
 /* -------------------- ENV & SETUP -------------------- */
 
@@ -35,6 +36,12 @@ const EnvSchema = z.object({
   GATE_COLLECTION_ADDRESS: z.string().min(1),
   PRIZE_COLLECTION_ADDRESS: z.string().min(1),
   GATE_TOKEN_ADDRESS: z.string().min(1),
+  GATE_TOKEN1_ADDRESS: z.string().min(1),
+  GATE_TOKEN2_ADDRESS: z.string().min(1),
+  GATE_TOKEN3_ADDRESS: z.string().min(1),
+  OPEN_TOKEN1_AMOUNT: z.coerce.number().default(10000),
+  OPEN_TOKEN2_AMOUNT: z.coerce.number().default(10000),
+  OPEN_TOKEN3_AMOUNT: z.coerce.number().default(10000),
   REDIS_URL: z.string().default('redis://127.0.0.1:6379'),
   PORT: z.coerce.number().default(8080),
   OPEN_FEE_LAMPORTS: z.coerce.number().default(1_000_000), // 0.001 SOL
@@ -73,6 +80,9 @@ const gateCollection = ENV.GATE_COLLECTION_ADDRESS;
 const prizeCollection = ENV.PRIZE_COLLECTION_ADDRESS;
 const feeWallet = new PublicKey(ENV.TREASURY_WALLET);
 const gateToken = new PublicKey(ENV.GATE_TOKEN_ADDRESS);
+const gateToken1 = new PublicKey(ENV.GATE_TOKEN1_ADDRESS);
+const gateToken2 = new PublicKey(ENV.GATE_TOKEN2_ADDRESS);
+const gateToken3 = new PublicKey(ENV.GATE_TOKEN3_ADDRESS);
 
 const redis = new Redis(ENV.REDIS_URL);
 
@@ -209,7 +219,11 @@ app.get('/eligibility', async (req: any, res: any) => {
     const owner = new PublicKey(ownerStr);
     const count = await findCollectionCountForOwner(mx, owner, gateCollection);
     const tokenCheck = await checkGateTokenHoldings(connection, owner, gateToken, ENV.OPEN_FEE_TOKEN)
-    const { remaining, used, limit, cooldownMs } = await getOpensRemaining(owner, count, tokenCheck.hasAccess);
+    const tokenCheck1 = await checkGateTokenHoldings(connection, owner, gateToken1, ENV.OPEN_TOKEN1_AMOUNT)
+    const tokenCheck2 = await checkGateTokenHoldings(connection, owner, gateToken2, ENV.OPEN_TOKEN2_AMOUNT)
+    const tokenCheck3 = await checkGateTokenHoldings(connection, owner, gateToken3, ENV.OPEN_TOKEN3_AMOUNT)
+    const isTokenHolder = tokenCheck.hasAccess || tokenCheck1.hasAccess || tokenCheck2.hasAccess || tokenCheck3.hasAccess;
+    const { remaining, used, limit, cooldownMs } = await getOpensRemaining(owner, count, isTokenHolder);
     res.json({
       ok: true,
       owner: owner.toBase58(),
@@ -234,11 +248,15 @@ app.post('/prepare-payment', async (req: any, res: any) => {
     const owner = new PublicKey(String(req.body.owner || ''));
     const holderCount = await findCollectionCountForOwner(mx, owner, gateCollection);
     const tokenCheck = await checkGateTokenHoldings(connection, owner, gateToken, ENV.OPEN_FEE_TOKEN);
-    if (holderCount < 1 && !tokenCheck.hasAccess) {
+    const tokenCheck1 = await checkGateTokenHoldings(connection, owner, gateToken1, ENV.OPEN_TOKEN1_AMOUNT)
+    const tokenCheck2 = await checkGateTokenHoldings(connection, owner, gateToken2, ENV.OPEN_TOKEN2_AMOUNT)
+    const tokenCheck3 = await checkGateTokenHoldings(connection, owner, gateToken3, ENV.OPEN_TOKEN3_AMOUNT)
+    const isTokenHolder = tokenCheck.hasAccess || tokenCheck1.hasAccess || tokenCheck2.hasAccess || tokenCheck3.hasAccess;
+    if (holderCount < 1 && !isTokenHolder) {
       return res.status(403).json({ ok: false, error: 'Only NFT holders are allowed to open.' });
     }
-    const { remaining } = await getOpensRemaining(owner, holderCount, tokenCheck.hasAccess);
-    if (remaining <= 0 && req.body.owner !="CP5rHaSUiWNdyThocCxNHDGavNSg1Z2arXtCcRuZBbD" ) {
+    const { remaining } = await getOpensRemaining(owner, holderCount, isTokenHolder);
+    if (remaining <= 0) {
       return res.status(403).json({ ok: false, error: 'Open limit reached in the last cooldown window' });
     }
     const ix = SystemProgram.transfer({
@@ -281,8 +299,12 @@ app.post('/open', async (req: any, res: any) => {
 
     const holderCount = await findCollectionCountForOwner(mx, owner, gateCollection);
     const tokenCheck = await checkGateTokenHoldings(connection, owner, gateToken, ENV.OPEN_FEE_TOKEN)
-    const { remaining } = await getOpensRemaining(owner, holderCount, tokenCheck.hasAccess);
-    if (remaining <= 0 && req.body.owner !="CP5rHaSUiWNdyThocCxNHDGavNSg1Z2arXtCcRuZBbD" ) {
+    const tokenCheck1 = await checkGateTokenHoldings(connection, owner, gateToken1, ENV.OPEN_TOKEN1_AMOUNT)
+    const tokenCheck2 = await checkGateTokenHoldings(connection, owner, gateToken2, ENV.OPEN_TOKEN2_AMOUNT)
+    const tokenCheck3 = await checkGateTokenHoldings(connection, owner, gateToken3, ENV.OPEN_TOKEN3_AMOUNT)
+    const isTokenHolder = tokenCheck.hasAccess || tokenCheck1.hasAccess || tokenCheck2.hasAccess || tokenCheck3.hasAccess;
+    const { remaining } = await getOpensRemaining(owner, holderCount, isTokenHolder);
+    if (remaining <= 0) {
       return res.status(403).json({ ok: false, error: 'Open limit reached in the last cooldown window' });
     }
 
@@ -298,7 +320,7 @@ app.post('/open', async (req: any, res: any) => {
     // Roll prize (weights will be normalized; your requested weights sum to 101.1%)
     const prize = choosePrize();
 
-    console.log("prize", prize);
+    logPrize(prize);
 
     let prizeTxSig: string | null = null;
     let prizeMint: string | null = null;

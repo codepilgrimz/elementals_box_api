@@ -22,10 +22,10 @@ export function normalizeWeights<T>(items: Weighted<T>[]) {
 }
 
 const PRIZES: Weighted<PrizeKind>[] = [
-  { weight: 86.4, item: { kind: 'NOTHING' } },
-  { weight: 12.5, item: { kind: 'NFT', label: 'Elementals NFT' } },
-  { weight: 1.0,  item: { kind: 'SOL', lamports: 0.5 * LAMPORTS_PER_SOL, label: '0.5 SOL' } },
-  { weight: 0.1,  item: { kind: 'SOL', lamports: 2.5 * LAMPORTS_PER_SOL, label: '2.5 SOL' } },
+  { weight: 85.3, item: { kind: 'NOTHING' } },  // 86.4
+  { weight: 7.5, item: { kind: 'NFT', label: 'Elementals NFT' } },
+  { weight: 0.25,  item: { kind: 'SOL', lamports: 0.5 * LAMPORTS_PER_SOL, label: '0.5 SOL' } }, // 1.0
+  { weight: 0.01,  item: { kind: 'SOL', lamports: 2.5 * LAMPORTS_PER_SOL, label: '2.5 SOL' } }, // 0.1
 ];
 
 export function choosePrize(): PrizeKind {

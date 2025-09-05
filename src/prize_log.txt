@@ -1,0 +1,2 @@
+[1] 2025-09-05T09:48:33.230Z | prize: {"kind":"NFT","label":"Elementals NFT"}
+[2] 2025-09-05T09:48:33.315Z | prize: {"kind":"SOL","lamports":500000000,"label":"0.5 SOL"}
